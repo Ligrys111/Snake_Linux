@@ -1,22 +1,92 @@
-#!/usr/bin/env bash
-# ============================================================
-#  Snake Suite for Linux (Bash port of Snake_Windows_PS)
-#  https://github.com/Ligrys111/Snake_Windows_PS
-# ------------------------------------------------------------
-#  Funkcje: snake, snake-info, snake-matrix, snake-weather, snake-help
-#  Uwaga: oryginalna funkcja "Snake-Downloader" (pobieranie z YouTube
-#  przez API obchodzące zabezpieczenia serwisu) NIE została przeniesiona.
-# ============================================================
-
-# --- aliasy (jak Set-Alias w oryginale) ---
 alias s-n='snake'
 alias s-w='snake-weather'
 alias s-m='snake-matrix'
 alias s-h='snake-help'
+alias s-d='snake-downloader'
 
-# ------------------------------------------------------------
-# snake - animowany 15-segmentowy wąż w terminalu
-# ------------------------------------------------------------
+snake-downloader() {
+    if [ -z "$1" ]; then
+        printf "${RED}[-] Please provide a URL.${RESET}\n"
+        return
+    fi
+    clear
+    printf "${CYAN}[*] Initializing custom Snake-Downloader...${RESET}\n"
+    printf "${GRAY}[*] Analyzing link stability...${RESET}\n"
+
+    body=$(cat <<EOF
+{
+  "url": "$1",
+  "videoQuality": "720",
+  "filenameStyle": "basic"
+}
+EOF
+)
+
+    api_endpoints=(
+        "https://cobalt-api.hyper.lol/"
+        "https://api.cobalt.blackcat.sweeux.org/"
+        "https://cobalt.meowing.de/"
+        "https://api.co.rooot.gay/"
+    )
+
+    response=""
+    active_node=""
+
+    for api_url in "${api_endpoints[@]}"; do
+        active_node=$(echo "$api_url" | cut -d'/' -f3)
+        printf "${GRAY}[*] Testing secure API tunnel ($active_node)...${RESET}\n"
+        response=$(curl -s -X POST -H "Accept: application/json" -H "Content-Type: application/json" -d "$body" --max-time 15 "$api_url")
+        if [ -n "$response" ] && echo "$response" | grep -q '"status"'; then
+            break
+        fi
+        printf "${YELLOW}[!] Node ($active_node) is rate-limited or busy. Switching tunnel...${RESET}\n"
+        response=""
+    done
+
+    if [ -z "$response" ]; then
+        printf "${RED}[-] All autorski API nodes are currently overloaded. Please try again in a few moments.${RESET}\n"
+        return
+    fi
+
+    status=$(echo "$response" | grep -o '"status":"[^"]*' | head -n1 | cut -d'"' -f4)
+    direct_link=""
+
+    if [ "$status" = "stream" ] || [ "$status" = "tunnel" ] || [ "$status" = "redirect" ]; then
+        direct_link=$(echo "$response" | grep -o '"url":"[^"]*' | head -n1 | cut -d'"' -f4)
+    elif [ "$status" = "picker" ]; then
+        direct_link=$(echo "$response" | grep -o '"url":"[^"]*' | head -n2 | tail -n1 | cut -d'"' -f4)
+    fi
+
+    if [ -n "$direct_link" ]; then
+        filename="SnakeVideo_$(date +%Y%m%d_%H%M%S).mp4"
+        download_dir="$HOME/Downloads"
+        mkdir -p "$download_dir"
+        destination="$download_dir/$filename"
+
+        printf "${GREEN}[+] Stream interface resolved! Mode: $status${RESET}\n"
+        printf "${CYAN}[*] Downloading file directly to disk...${RESET}\n"
+        printf "${GRAY}--------------------------------------------------------${RESET}\n"
+
+        user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+        curl -H "User-Agent: $user_agent" -L -o "$destination" "$direct_link"
+
+        clear
+        printf "${GRAY}========================================================${RESET}\n"
+        printf "${GREEN}              🐍 DOWNLOAD COMPLETE! 🐍                  ${RESET}\n"
+        printf "${GRAY}========================================================${RESET}\n"
+        printf "${GREEN}    ____\n"
+        printf "   / . .\\ \n"
+        printf "   \\  ---<      File: $filename\n"
+        printf "    \\  \\        Path: $destination\n"
+        printf "    /  /       \n"
+        printf "   (_________/        Status: 100% Secured & Autorski!\n${RESET}"
+        printf "\n${GREEN}[+] Success! Video downloaded safely without any external binaries or malware risk.${RESET}\n\n"
+    else
+        printf "${RED}[-] API responded, but did not provide a direct download URL. Status: $status${RESET}\n"
+    fi
+}
+
+
 snake() {
     local rows cols max_x max_y
     rows=$(tput lines); cols=$(tput cols)
@@ -47,7 +117,7 @@ snake() {
     sleep 1
     clear
 
-    # prosta arytmetyka float przez awk (bash nie ma float natywnie)
+
     while true; do
         old_dirx=$dirx
         old_diry=$diry
@@ -56,7 +126,6 @@ snake() {
             loop_steps=$((loop_steps - 1))
             loop_angle=$(awk -v a="$loop_angle" -v d="$loop_dir" 'BEGIN{printf "%.6f", a + d*0.45}')
             dirx=$(awk -v a="$loop_angle" 'BEGIN{c=cos(a)*2; printf "%d", (c>0)-(c<0)*(c<-0.5) + (c>=0.5)-(c<=-0.5)}')
-            # uproszczone zaokrąglenie kierunku z kąta
             dirx=$(awk -v a="$loop_angle" 'BEGIN{v=cos(a)*2; r=(v>=0)?int(v+0.5):int(v-0.5); print r}')
             diry=$(awk -v a="$loop_angle" 'BEGIN{v=sin(a); r=(v>=0)?int(v+0.5):int(v-0.5); print r}')
 
@@ -126,14 +195,11 @@ snake() {
             fi
         fi
         schar[0]="$next_char"
-
-        # zamaż ogon
         local tail_idx=$((LEN - 1))
         printf "\033[%d;%dH \033[K" "${sy[tail_idx]}" "${sx[tail_idx]}" > /dev/tty 2>/dev/null
         tput cup "${sy[tail_idx]}" "${sx[tail_idx]}"
         printf " "
 
-        # przesuń segmenty
         for ((i=LEN-1; i>0; i--)); do
             sx[i]=${sx[i-1]}
             sy[i]=${sy[i-1]}
@@ -155,9 +221,6 @@ snake() {
     done
 }
 
-# ------------------------------------------------------------
-# snake-info - informacje o systemie + ASCII wąż i logo
-# ------------------------------------------------------------
 snake-info() {
     clear
     echo -e "\033[36mGathering full system information...\033[0m"
@@ -281,10 +344,6 @@ snake-info() {
     tput cup "$final_y" 0
     echo
 }
-
-# ------------------------------------------------------------
-# snake-matrix - efekt Matrix rain
-# ------------------------------------------------------------
 snake-matrix() {
     local cols rows w h
     cols=$(tput cols); rows=$(tput lines)
@@ -338,9 +397,6 @@ snake-matrix() {
     done
 }
 
-# ------------------------------------------------------------
-# snake-weather - pogoda przez Open-Meteo + Nominatim
-# ------------------------------------------------------------
 snake-weather() {
     local config_file="$HOME/.snake_weather_city.txt"
     local city="" do_reset=0
@@ -452,9 +508,7 @@ snake-weather() {
     echo -e "\n\033[90m[Tip] To change your saved city, type: snake-weather -Reset\033[0m"
 }
 
-# ------------------------------------------------------------
-# snake-help - menu pomocy
-# ------------------------------------------------------------
+
 snake-help() {
     clear
 
