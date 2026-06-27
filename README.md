@@ -2,7 +2,7 @@
 
 A Bash port of the [Snake_Windows_PS](https://github.com/Ligrys111/Snake_Windows_PS) script collection for Linux.
 
-> **Note:** the original `Snake-Downloader` function (downloading from YouTube via an API that bypasses the platform's protections) was **not ported**. Everything else is fully functional.
+> 
 
 ## ⚡ One-line install
 
